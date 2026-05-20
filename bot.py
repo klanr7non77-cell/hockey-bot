@@ -400,12 +400,11 @@ async def main():
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Render автоматически выделяет порт и передает его в переменные окружения
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     
-    # Запуск бота на прослушивание Telegram
+    # Запуск бота
     await dp.start_polling(bot)
 
 if name == "main":
