@@ -127,7 +127,8 @@ async def profile_cmd(message: Message):
         f"💸 Всего поставлено: {total_spent} монет",
         parse_mode="Markdown"
     )
- @dp.message(Command("top"))
+
+@dp.message(Command("top"))
 async def top_cmd(message: Message):
     cursor.execute("SELECT username, balance FROM users ORDER BY balance DESC LIMIT 10")
     leaders = cursor.fetchall()
@@ -214,7 +215,7 @@ async def start_bet(message: Message, command: CommandObject, state: FSMContext)
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=f"П1 ({match[0]})"), KeyboardButton(text="Ничья (Х)"), KeyboardButton(text=f"П2 ({match[1]})")]
- ],
+        ],
         resize_keyboard=True,
         one_time_keyboard=True
     )
@@ -305,7 +306,7 @@ async def add_match_cmd(message: Message, command: CommandObject):
         await message.answer("❌ Ошибка. Проверь пробелы и формат коэффициентов.")
 
 @dp.message(Command("endmatch"))
- async def end_match_cmd(message: Message, command: CommandObject):
+async def end_match_cmd(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID: return
     if not command.args or len(command.args.split()) != 2:
         return await message.answer("📝 Формат: /endmatch [ID] [P1, X или P2]\nПример: /endmatch 1 P1")
@@ -382,7 +383,7 @@ async def add_promo_cmd(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID: return
     if not command.args or len(command.args.split()) != 3:
         return await message.answer("📝 Формат: /addpromo [КОД] [СУММА] [АКТИВАЦИИ]")
- try:
+    try:
         code, reward, uses = command.args.split()
         cursor.execute("INSERT INTO promocodes (code, reward, uses_left) VALUES (?, ?, ?)", (code, int(reward), int(uses)))
         conn.commit()
