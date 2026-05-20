@@ -5,6 +5,7 @@ import time
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command, CommandObject
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web  # Нужно для обхода ограничений бесплатного тарифа Render
 
@@ -406,6 +407,6 @@ async def main():
     # Запуск бота
     await dp.start_polling(bot)
 
-if name == "main":
+if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
