@@ -1,4 +1,4 @@
-import os
+: import os
 import sqlite3
 import logging
 import time
@@ -7,6 +7,7 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKey
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiohttp import web  # Нужно для обхода ограничений бесплатного тарифа Render
 
 # Настройка логов
 logging.basicConfig(level=logging.INFO)
@@ -17,11 +18,11 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Инициализация базы данных SQLite (v2 для новой структуры)
+# Инициализация базы данных SQLite
 conn = sqlite3.connect("hockey_bet_v2.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Создание таблиц (обновленная структура)
+# Создание таблиц
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
@@ -81,7 +82,6 @@ def get_user(user_id, username=""):
         conn.commit()
         return 1000, 0
     
-    # Обновляем юзернейм, если он поменялся
     if username:
         cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
         conn.commit()
@@ -127,7 +127,7 @@ async def profile_cmd(message: Message):
         f"💸 Всего поставлено: {total_spent} монет",
         parse_mode="Markdown"
     )
-@dp.message(Command("top"))
+ @dp.message(Command("top"))
 async def top_cmd(message: Message):
     cursor.execute("SELECT username, balance FROM users ORDER BY balance DESC LIMIT 10")
     leaders = cursor.fetchall()
@@ -145,11 +145,11 @@ async def bonus_cmd(message: Message):
     _, last_bonus = get_user(user_id)
     current_time = int(time.time())
     
-    if current_time - last_bonus >= 86400: # 24 часа (в секундах)
+    if current_time - last_bonus >= 86400:
         bonus_amount = 670
         cursor.execute("UPDATE users SET last_bonus = ? WHERE user_id = ?", (current_time, user_id))
         update_balance(user_id, bonus_amount)
-        await message.answer(f"🎁 Ты получил ежедневный бонус: +{bonus_amount} монет!\nПриходи завтра за новой порцией.")
+        await message.answer(f"🎁 Ты получил ежедневный бонус: +{bonus_amount} монет!\nПриходи завтра.")
     else:
         time_left = 86400 - (current_time - last_bonus)
         hours = time_left // 3600
@@ -159,7 +159,7 @@ async def bonus_cmd(message: Message):
 @dp.message(Command("promo"))
 async def use_promo_cmd(message: Message, command: CommandObject):
     if not command.args:
-        return await message.answer("❌ Введи промокод. Пример: /promo NUBS67")
+        return await message.answer("❌ Введи промокод. Пример: /promo WIN")
     code = command.args.strip()
     user_id = message.from_user.id
     get_user(user_id, message.from_user.username)
@@ -207,18 +207,18 @@ async def start_bet(message: Message, command: CommandObject, state: FSMContext)
     cursor.execute("SELECT team1, team2, coef_p1, coef_x, coef_p2 FROM matches WHERE match_id = ? AND status = 'open'", (match_id,))
     match = cursor.fetchone()
     if not match:
-        return await message.answer("❌ Матч не найден или прием ставок на него уже закрыт.")
+        return await message.answer("❌ Матч не найден или закрыт.")
         
     await state.update_data(match_id=match_id, team1=match[0], team2=match[1], coef_p1=match[2], coef_x=match[3], coef_p2=match[4])
     
     kb = ReplyKeyboardMarkup(
- keyboard=[
+        keyboard=[
             [KeyboardButton(text=f"П1 ({match[0]})"), KeyboardButton(text="Ничья (Х)"), KeyboardButton(text=f"П2 ({match[1]})")]
-        ],
+ ],
         resize_keyboard=True,
         one_time_keyboard=True
     )
-    await message.answer(f"Матч: {match[0]} — {match[1]}\nВыберите исход, на который хотите поставить:", reply_markup=kb)
+    await message.answer(f"Матч: {match[0]} — {match[1]}\nВыберите исход:", reply_markup=kb)
     await state.set_state(BetStates.choosing_outcome)
 
 @dp.message(BetStates.choosing_outcome)
@@ -289,7 +289,7 @@ async def my_bets_cmd(message: Message):
 async def add_match_cmd(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID: return
     if not command.args:
-        return await message.answer("📝 Формат: /addmatch Команда1 Команда2 КоэфП1 КоэфХ КоэфП2\nПример: /addmatch ХК_Сочи Северсталь 2.2 3.8 2.4")
+        return await message.answer("📝 Формат: /addmatch Команда1 Команда2 КоэфП1 КоэфХ КоэфП2\nПример: /addmatch ЦСКА СКА 2.2 3.8 2.4")
     
     try:
         parts = command.args.split()
@@ -303,8 +303,9 @@ async def add_match_cmd(message: Message, command: CommandObject):
         await message.answer(f"✅ Матч #{match_id} [{t1} — {t2}] успешно добавлен в линию!")
     except Exception:
         await message.answer("❌ Ошибка. Проверь пробелы и формат коэффициентов.")
- @dp.message(Command("endmatch"))
-async def end_match_cmd(message: Message, command: CommandObject):
+
+@dp.message(Command("endmatch"))
+ async def end_match_cmd(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID: return
     if not command.args or len(command.args.split()) != 2:
         return await message.answer("📝 Формат: /endmatch [ID] [P1, X или P2]\nПример: /endmatch 1 P1")
@@ -356,7 +357,7 @@ async def cancel_match_cmd(message: Message, command: CommandObject):
         cursor.execute("UPDATE bets SET status = 'refund' WHERE bet_id = ?", (bet_id,))
         update_balance(u_id, amount)
         try:
-            await bot.send_message(u_id, f"🔄 Матч #{match_id} отменен. Твоя ставка {amount} 💰 возвращена на баланс.")
+            await bot.send_message(u_id, f"🔄 Матч #{match_id} отменен. Твоя ставка {amount} 💰 возвращена.")
         except Exception: pass
         
     conn.commit()
@@ -374,7 +375,7 @@ async def give_money_cmd(message: Message, command: CommandObject):
         await message.answer(f"✅ Успешно начислено {amount} монет игроку {to_user_id}.")
         await bot.send_message(to_user_id, f"💰 Администратор выдал тебе {amount} монет!")
     except Exception:
-        await message.answer("❌ Ошибка ввода. ID и сумма должны быть числами.")
+        await message.answer("❌ ID и сумма должны быть числами.")
 
 @dp.message(Command("addpromo"))
 async def add_promo_cmd(message: Message, command: CommandObject):
@@ -391,6 +392,21 @@ async def add_promo_cmd(message: Message, command: CommandObject):
     except Exception:
         await message.answer("❌ Ошибка формата.")
 
+# --- ЗАПУСК ВЕБ-СЕРВЕРА ДЛЯ ОБХОДА ОГРАНИЧЕНИЙ RENDER ---
+async def main():
+    app = web.Application()
+    app.router.add_get("/", lambda r: web.Response(text="Бот успешно работает!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render автоматически выделяет порт и передает его в переменные окружения
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    
+    # Запуск бота на прослушивание Telegram
+    await dp.start_polling(bot)
+
 if name == "main":
     import asyncio
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())
